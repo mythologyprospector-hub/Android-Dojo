@@ -1,7 +1,7 @@
 # Android Dojo Canon
 
 **Status:** Foundational
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Authority:** This document defines the project's non-negotiable architectural and documentation rules.
 
 > **Canon is law.**
@@ -21,19 +21,90 @@ When convenience conflicts with safety, clarity, or reproducibility, safety and 
 3. **Know the recovery.** A risky lab documents the expected failure modes and a recovery path before the risky step.
 4. **Leave a trail.** Experiments record enough information to reproduce, diagnose, and learn from the result.
 
-## 3. Architecture
+## 3. System Architecture
+
+Android Dojo is a system, not merely a collection of tutorials and scripts.
+
+Its components communicate through explicit, testable contracts. Components must be independently understandable, observable, replaceable, and verifiable wherever practical.
+
+The Dojo communication spine is **compatible with the established Organs communication architecture**. The Organs protocol reference is authoritative for that compatibility boundary.
+
+The Dojo must not invent a competing service-discovery mechanism, message bus, correlation convention, telemetry transport, or common HTTP error convention when an established Organs contract already provides one.
+
+### 3.1 Communication Layers
+
+These layers are complementary and must not be treated as interchangeable:
+
+- **Registry:** service discovery and liveness/heartbeat registration.
+- **Communications BUS:** event publication, consumption, cursors, and dispatch.
+- **Organ base:** common HTTP presentation, health/info endpoints, error envelopes, correlation propagation, and safety/risk integration.
+- **Organ client:** discovery, registration, heartbeat, and organ-to-organ client behavior.
+- **Correlation:** request-scoped `X-Correlation-ID` context.
+- **Telemetry:** best-effort operational observation that must not turn a successful operation into failure.
+- **Safety/risk gate:** authorization and risk control for mutating or risky operations.
+
+Registry discovers services. The BUS moves events. The common organ layer presents services consistently. Correlation identifies related work. Telemetry observes it. Safety controls risky actions.
+
+### 3.2 Discovery Rule
+
+The Registry is the hardcoded service address in the communication architecture. Organ-to-organ addresses must be discovered through the Registry rather than hardcoded into components.
+
+Components must refuse stale or non-live registrations rather than silently communicating with an obsolete service.
+
+### 3.3 BUS Rule
+
+The Communications BUS is the system event and dispatch layer.
+
+Dojo components must use the established BUS semantics for inter-component events instead of creating a second message system.
+
+The BUS is broadcast/pub-sub capable: consuming an event advances a consumer's own cursor and does not remove the event for other consumers.
+
+Consumers must have stable identities when cursor persistence matters. Peek/read operations must not advance cursors. Dispatch behavior must use the established dispatch semantics and persistent dispatch state.
+
+### 3.4 HTTP and Error Rule
+
+Compatible Dojo organs use the established common HTTP surface, including:
+
+- `/health`
+- `/info`
+- standard JSON error envelopes
+- `X-Correlation-ID` generation, propagation, and return on errors
+
+Mutating or risky requests pass the established safety/risk gate unless an explicit documented infrastructure exemption applies. GET/HEAD/OPTIONS behavior follows the established exemption convention.
+
+Executive-approved operations carry `X-Executive-Approved` where that contract applies.
+
+### 3.5 Telemetry Rule
+
+Telemetry is independent of the safety gate.
+
+Telemetry is best effort. A telemetry failure must never convert an otherwise successful organ operation into a failure.
+
+Telemetry must preserve correlation and provenance and must avoid recursive telemetry noise using the established internal telemetry convention.
+
+### 3.6 System Boundary
+
+The Dojo distinguishes three things:
+
+1. **Host system:** the computer running the Dojo services and Android tooling.
+2. **Dojo system:** the software, curriculum, tools, organs, contracts, BUS activity, evidence, and safety machinery built by this repository.
+3. **Target device:** the Android hardware being inspected, modified, recovered, or otherwise used as a laboratory target.
+
+A host capability must never be confused with an Android target capability. Device-specific operations must identify their target explicitly.
+
+## 4. Repository Architecture
 
 The repository is organized into four conceptual layers:
 
 ```text
 FOUNDATION
-    Canon, schemas, terminology, safety rules
+    Canon, schemas, terminology, communication contracts, safety rules
         ↓
 CURRICULUM
     Lessons, labs, exercises, prerequisites
         ↓
 TOOLING
-    Scripts, validators, inspectors, helpers
+    Scripts, validators, inspectors, helpers, system components
         ↓
 REFERENCE
     Device notes, recovery procedures, examples, case studies
@@ -55,7 +126,7 @@ Tools automate deterministic work. Tools must fail loudly rather than silently m
 
 Reference material records device-specific knowledge and real-world lessons. It must never be treated as universal instruction unless explicitly marked as such.
 
-## 4. Standard Lesson Format
+## 5. Standard Lesson Format
 
 Every instructional lesson uses this structure:
 
@@ -96,7 +167,7 @@ Estimated time:
 
 The order may only be changed when the lesson genuinely requires it.
 
-## 5. Lab Format
+## 6. Lab Format
 
 Labs are practical exercises and use a stricter contract:
 
@@ -125,7 +196,7 @@ Required Tools:
 
 A lab that intentionally introduces failure must clearly label the failure as intentional and provide a recovery procedure.
 
-## 6. Command Standard
+## 7. Command Standard
 
 Commands must be presented with:
 
@@ -148,7 +219,7 @@ adb devices -l
 
 Destructive commands require a visible warning immediately before the command.
 
-## 7. Device Identity
+## 8. Device Identity
 
 Device-specific material must identify the target as precisely as practical.
 
@@ -168,7 +239,7 @@ device:
 
 Never assume two phones are interchangeable merely because they share a product name.
 
-## 8. Risk Classification
+## 9. Risk Classification
 
 | Level | Meaning |
 |---|---|
@@ -180,7 +251,7 @@ Never assume two phones are interchangeable merely because they share a product 
 
 Risk labels describe the operation, not the learner's experience level.
 
-## 9. Evidence and Verification
+## 10. Evidence and Verification
 
 The Dojo distinguishes between:
 
@@ -191,7 +262,7 @@ The Dojo distinguishes between:
 
 Do not present a hypothesis as fact.
 
-## 10. Tool Contract
+## 11. Tool Contract
 
 Every repository tool should have:
 
@@ -206,7 +277,7 @@ Every repository tool should have:
 
 Tools must not silently guess a device, partition, slot, firmware, or file.
 
-## 11. File Naming
+## 12. File Naming
 
 Use lowercase kebab-case for ordinary documentation and lesson filenames:
 
@@ -226,7 +297,7 @@ CONTRIBUTING.md
 CODE_OF_CONDUCT.md
 ```
 
-## 12. Versioning
+## 13. Versioning
 
 Canonical schemas and formats use semantic versioning:
 
@@ -240,7 +311,7 @@ MAJOR.MINOR.PATCH
 
 Lessons and labs receive stable IDs so links and references remain durable even if filenames change.
 
-## 13. No Cargo Culting
+## 14. No Cargo Culting
 
 The Dojo does not teach commands merely because they are common in forum posts.
 
@@ -254,7 +325,7 @@ Every procedure should answer:
 
 If those questions cannot be answered, the procedure is not ready for the curriculum.
 
-## 14. Safety Boundaries
+## 15. Safety Boundaries
 
 The Dojo may teach powerful techniques, including bootloader operations, image modification, recovery, kernel experimentation, and low-level Android internals.
 
@@ -262,7 +333,7 @@ It must not normalize reckless experimentation on someone's primary device.
 
 Where a technique has meaningful brick or data-loss risk, the curriculum should first provide a safer simulation, inspection exercise, emulator workflow, disposable target, or recovery exercise when one is practical.
 
-## 15. Contributions
+## 16. Contributions
 
 Contributions should improve the learner's understanding, safety, reproducibility, or ability to recover from mistakes.
 
@@ -270,7 +341,7 @@ A contribution that works but cannot be explained is incomplete.
 
 A contribution that documents a failure and what was learned from it can be valuable even when no code is produced.
 
-## 16. Canon Changes
+## 17. Canon Changes
 
 Changes to this document are architectural changes.
 
@@ -281,6 +352,7 @@ Before modifying Canon, consider:
 - Does it improve safety or reproducibility?
 - Does it introduce a new standard where an existing one is sufficient?
 - Will existing lessons remain understandable?
+- Does it preserve established Organs compatibility where applicable?
 
 Canon should evolve deliberately, not continuously.
 
